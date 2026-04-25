@@ -1,0 +1,43 @@
+data:
+  root_dir: data/kvasir-v2
+  split_dir: data/splits/kvasir_v2_capsnet
+  image_size: 128
+  batch_size: 8
+  num_workers: 0
+  val_ratio: 0.2
+  test_ratio: 0.1
+  seed: 42
+  augment: true
+  pin_memory: true
+
+model:
+  name: densenet121_capsnet
+  pretrained: false
+  backbone_checkpoint_path: artifacts/normal_lession_densenet121/best.pt
+  freeze_backbone: false
+  feature_h: 4
+  feature_w: 4
+  primary_caps_dim: 8
+  capsule_dim: 8
+  digit_caps_dim: 16
+  num_capsules: 256
+  capsule_routing_iters: 2
+  digit_routing_iters: 3
+  margin_m_plus: 0.9
+  margin_m_minus: 0.1
+  margin_lambda: 0.5
+
+training:
+  epochs: 50
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  early_stopping_patience: 25
+
+runtime:
+  output_dir: artifacts/kvasir_v2_densenet121_capsnet
+  device: auto
+  checkpoint_name: best.pt
+  log_level: INFO
+  train_log_file: train.log
+  val_log_file: val.log
+  test_log_file: test.log

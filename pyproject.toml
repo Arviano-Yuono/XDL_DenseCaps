@@ -1,0 +1,50 @@
+[project]
+name = "xdl-densecaps"
+version = "0.1.0"
+description = "Incremental PyTorch implementation of the DenseNetCaps baseline for GI endoscopy classification."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "matplotlib>=3.10.9",
+    "opencv-python>=4.13.0.92",
+    "pillow>=11.2.1",
+    "pypdf>=6.10.1",
+    "pyyaml>=6.0.2",
+    "scikit-learn>=1.7.0",
+    "torch>=2.7.0",
+    "torchvision>=0.22.0",
+    "tqdm>=4.67.1",
+]
+
+[project.scripts]
+xdl-train = "xdl_densecaps.train:main"
+xdl-val = "xdl_densecaps.val:main"
+xdl-test = "xdl_densecaps.test:main"
+
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu118" }
+torchvision = { index = "pytorch-cu118" }
+
+[[tool.uv.index]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
