@@ -44,6 +44,10 @@ uv sync --dev
 
 You do not need to manually activate `.venv` when using `uv run`.
 
+`uv.lock` is intentionally not tracked. PyTorch/CUDA builds can differ per PC,
+so each machine should resolve or install the Torch build that matches its own
+driver/CUDA setup.
+
 ## Data Layout
 
 Expected dataset layout:

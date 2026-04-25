@@ -30,5 +30,8 @@ tmp_stage1_smoke/
 # Virtual environments
 .venv
 
+# Machine-specific uv resolution
+uv.lock
+
 # Jupyter
 .ipynb_checkpoints/
