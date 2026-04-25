@@ -3,7 +3,7 @@ name = "xdl-densecaps"
 version = "0.1.0"
 description = "Incremental PyTorch implementation of the DenseNetCaps baseline for GI endoscopy classification."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.12"
 dependencies = [
     "matplotlib>=3.10.9",
     "opencv-python>=4.13.0.92",
