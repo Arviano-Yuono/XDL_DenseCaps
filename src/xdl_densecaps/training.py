@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import random
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
+from hashlib import sha256
 from pathlib import Path
 
 import torch
@@ -20,6 +22,7 @@ from xdl_densecaps.models import CapsuleMarginLoss, DenseNet121Classifier, Dense
 
 
 SPLIT_FILENAME = "splits.json"
+SPLIT_STRATEGY = "sha256_grouped_v1"
 
 
 @dataclass(frozen=True)
@@ -210,37 +213,41 @@ def create_split_indices(
     test_ratio: float,
     seed: int,
 ) -> SplitIndices:
-    """Create stratified train/val/test indices."""
+    """Create duplicate-aware train/val/test indices.
+
+    Exact duplicate files are grouped by SHA-256 and assigned to the same split
+    so the same image content cannot appear in train, validation, and test.
+    """
 
     if val_ratio < 0.0 or test_ratio < 0.0 or val_ratio + test_ratio >= 1.0:
         raise ValueError("val_ratio and test_ratio must be non-negative and sum to less than 1.0.")
 
     generator = torch.Generator().manual_seed(seed)
-    train_indices: list[int] = []
-    val_indices: list[int] = []
-    test_indices: list[int] = []
+    groups = _duplicate_groups(dataset)
+    permutation = torch.randperm(len(groups), generator=generator).tolist()
+    shuffled_groups = [groups[index] for index in permutation]
+    shuffled_groups.sort(key=len, reverse=True)
 
-    for label in range(len(CLASS_NAMES)):
-        label_indices = [idx for idx, sample in enumerate(dataset.samples) if sample.label == label]
-        if not label_indices:
-            continue
+    targets = _split_targets(dataset, val_ratio, test_ratio)
+    split_indices = {"train": [], "val": [], "test": []}
+    split_label_counts = {
+        split_name: {label: 0 for label in range(len(CLASS_NAMES))}
+        for split_name in split_indices
+    }
 
-        permutation = torch.randperm(len(label_indices), generator=generator).tolist()
-        shuffled = [label_indices[idx] for idx in permutation]
-        test_count = _split_count(len(shuffled), test_ratio)
-        val_count = _split_count(len(shuffled), val_ratio)
+    for group in shuffled_groups:
+        group_label_counts = Counter(dataset.samples[index].label for index in group)
+        split_name = _choose_split_for_group(group_label_counts, split_label_counts, targets)
 
-        while test_count + val_count >= len(shuffled) and test_count + val_count > 0:
-            if val_count >= test_count and val_count > 0:
-                val_count -= 1
-            elif test_count > 0:
-                test_count -= 1
+        split_indices[split_name].extend(group)
+        for label, count in group_label_counts.items():
+            split_label_counts[split_name][label] += count
 
-        test_indices.extend(shuffled[:test_count])
-        val_indices.extend(shuffled[test_count : test_count + val_count])
-        train_indices.extend(shuffled[test_count + val_count :])
-
-    return SplitIndices(train=train_indices, val=val_indices, test=test_indices)
+    return SplitIndices(
+        train=split_indices["train"],
+        val=split_indices["val"],
+        test=split_indices["test"],
+    )
 
 
 def save_split_indices(path: Path, split_indices: SplitIndices, metadata: dict[str, object]) -> None:
@@ -376,12 +383,78 @@ def _split_count(total_count: int, ratio: float) -> int:
     return split_count
 
 
+def _duplicate_groups(dataset: BinaryNormalLessionDataset) -> list[list[int]]:
+    groups_by_hash: dict[str, list[int]] = defaultdict(list)
+    for index, sample in enumerate(dataset.samples):
+        groups_by_hash[_file_sha256(sample.path)].append(index)
+    return list(groups_by_hash.values())
+
+
+def _file_sha256(path: Path) -> str:
+    digest = sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _split_targets(
+    dataset: BinaryNormalLessionDataset,
+    val_ratio: float,
+    test_ratio: float,
+) -> dict[str, dict[int, int]]:
+    targets = {
+        "train": {label: 0 for label in range(len(CLASS_NAMES))},
+        "val": {label: 0 for label in range(len(CLASS_NAMES))},
+        "test": {label: 0 for label in range(len(CLASS_NAMES))},
+    }
+
+    for label in range(len(CLASS_NAMES)):
+        total_count = sum(1 for sample in dataset.samples if sample.label == label)
+        test_count = _split_count(total_count, test_ratio)
+        val_count = _split_count(total_count, val_ratio)
+
+        while test_count + val_count >= total_count and test_count + val_count > 0:
+            if val_count >= test_count and val_count > 0:
+                val_count -= 1
+            elif test_count > 0:
+                test_count -= 1
+
+        targets["test"][label] = test_count
+        targets["val"][label] = val_count
+        targets["train"][label] = total_count - test_count - val_count
+
+    return targets
+
+
+def _choose_split_for_group(
+    group_label_counts: Counter[int],
+    split_label_counts: dict[str, dict[int, int]],
+    targets: dict[str, dict[int, int]],
+) -> str:
+    best_split = "train"
+    best_score = -1
+
+    for split_name in ("test", "val", "train"):
+        score = 0
+        for label, group_count in group_label_counts.items():
+            remaining = targets[split_name][label] - split_label_counts[split_name][label]
+            score += min(group_count, max(remaining, 0))
+
+        if score > best_score:
+            best_split = split_name
+            best_score = score
+
+    return best_split
+
+
 def _split_metadata(
     dataset: BinaryNormalLessionDataset,
     config: ExperimentConfig,
     data_root: Path,
 ) -> dict[str, object]:
     return {
+        "split_strategy": SPLIT_STRATEGY,
         "data_root": str(data_root.resolve()),
         "sample_count": len(dataset),
         "class_counts": dataset.class_counts(),

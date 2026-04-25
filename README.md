@@ -125,6 +125,10 @@ uv run xdl-train --config configs/kvasir_v2_capsnet.yaml
 That config reads from `data/kvasir-v2` and trains from scratch by default, so it
 does not require any local file under `artifacts/`.
 
+Splits are duplicate-aware. The split generator hashes each image file and keeps
+exact duplicate files in the same split, so identical image content cannot appear
+in train, validation, and test at the same time.
+
 ## Train
 
 ```powershell
