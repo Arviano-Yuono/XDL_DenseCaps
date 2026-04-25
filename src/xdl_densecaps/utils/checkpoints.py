@@ -22,7 +22,14 @@ def load_checkpoint_state_dict(
     stripped because they are an implementation detail of the training run.
     """
 
-    checkpoint = torch.load(Path(path), map_location=map_location)
+    checkpoint_path = Path(path)
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(
+            f"Checkpoint does not exist: {checkpoint_path}. "
+            "If you want to train from scratch, set model.backbone_checkpoint_path to null."
+        )
+
+    checkpoint = torch.load(checkpoint_path, map_location=map_location, weights_only=True)
     return unwrap_state_dict(checkpoint)
 
 

@@ -116,6 +116,15 @@ model:
   backbone_checkpoint_path: null
 ```
 
+For the Kvasir v2 binary dataset, use:
+
+```powershell
+uv run xdl-train --config configs/kvasir_v2_capsnet.yaml
+```
+
+That config reads from `data/kvasir-v2` and trains from scratch by default, so it
+does not require any local file under `artifacts/`.
+
 ## Train
 
 ```powershell
