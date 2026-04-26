@@ -11,6 +11,10 @@ reference
 SPEC.md
 SUMMARY.md
 
+# Local experiment configs
+configs/*
+!configs/config.yaml
+
 # dataset
 data/kvasir-v2/
 data/raw/*
