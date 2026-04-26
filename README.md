@@ -5,10 +5,10 @@ Hybrid DenseNet121 + CapsNet training code for binary GI image classification.
 The project currently predicts two classes:
 
 - `normal`
-- `lession`
+- `lesion`
 
 Images inside `data/raw/normal` or `data/raw/nomal` are labeled `normal`.
-Images inside every other folder under `data/raw` are labeled `lession`.
+Images inside every other folder under `data/raw` are labeled `lesion`.
 
 ## Model
 
@@ -56,13 +56,14 @@ Expected dataset layout:
 data/raw/
   nomal/      -> normal class
   normal/     -> normal class, also supported
-  uc_1/       -> lession class
-  uc_2/       -> lession class
-  uc_3/       -> lession class
+  uc_1/       -> lesion class
+  uc_2/       -> lesion class
+  uc_3/       -> lesion class
 ```
 
-The folder names under the lession class do not need to be exactly `uc_*`.
-Anything that is not `normal` or `nomal` becomes label `1`.
+The folder names under the lesion class do not need to be exactly `uc_*`.
+Anything that is not `normal` or `nomal` becomes label `1`. Older folders named
+`lession` are still accepted because they are treated as non-normal folders.
 
 ## Config
 
@@ -86,7 +87,7 @@ data:
 model:
   name: densenet121_capsnet
   pretrained: false
-  backbone_checkpoint_path: artifacts/normal_lession_densenet121/best.pt
+  backbone_checkpoint_path: artifacts/normal_lesion_densenet121/best.pt
   freeze_backbone: false
   feature_h: 4
   feature_w: 4
@@ -102,7 +103,7 @@ training:
   early_stopping_patience: 30
 
 runtime:
-  output_dir: artifacts/normal_lession_densenet121_capsnet
+  output_dir: artifacts/normal_lesion_densenet121_capsnet
   device: auto
   checkpoint_name: best.pt
 ```
@@ -110,7 +111,7 @@ runtime:
 The default config initializes the DenseNet backbone from:
 
 ```text
-artifacts/normal_lession_densenet121/best.pt
+artifacts/normal_lesion_densenet121/best.pt
 ```
 
 To train the hybrid model without that old DenseNet-only checkpoint, set:
@@ -142,7 +143,7 @@ uv run xdl-train --config configs/config.yaml
 Training validates after each epoch and saves the best checkpoint to:
 
 ```text
-artifacts/normal_lession_densenet121_capsnet/best.pt
+artifacts/normal_lesion_densenet121_capsnet/best.pt
 ```
 
 The output folder also contains:
@@ -162,8 +163,8 @@ uv run xdl-val --config configs/config.yaml
 This writes:
 
 ```text
-artifacts/normal_lession_densenet121_capsnet/val_metrics.json
-artifacts/normal_lession_densenet121_capsnet/val.log
+artifacts/normal_lesion_densenet121_capsnet/val_metrics.json
+artifacts/normal_lesion_densenet121_capsnet/val.log
 ```
 
 ## Test
@@ -175,8 +176,26 @@ uv run xdl-test --config configs/config.yaml
 This writes:
 
 ```text
-artifacts/normal_lession_densenet121_capsnet/test_metrics.json
-artifacts/normal_lession_densenet121_capsnet/test.log
+artifacts/normal_lesion_densenet121_capsnet/test_metrics.json
+artifacts/normal_lesion_densenet121_capsnet/test.log
+```
+
+## Filter Lesion Regions
+
+After training, create a dataset of the selected lesion-region crops with:
+
+```powershell
+uv run xdl-filter-lesions --config configs/config.yaml
+```
+
+This processes every image under `data.root_dir`, builds KMeans normal-region
+centroids from correctly predicted normal images, and saves one filtered lesion
+crop per correctly predicted lesion image. The default output is:
+
+```text
+artifacts/normal_lesion_densenet121_capsnet/filtered_lesion_regions/
+  images/
+  metadata.json
 ```
 
 ## Direct Python Commands
@@ -187,6 +206,7 @@ These are equivalent to the script commands:
 uv run python -m xdl_densecaps.train --config configs/config.yaml
 uv run python -m xdl_densecaps.val --config configs/config.yaml
 uv run python -m xdl_densecaps.test --config configs/config.yaml
+uv run python -m xdl_densecaps.filter_lesion_regions --config configs/config.yaml
 ```
 
 ## Notebook
