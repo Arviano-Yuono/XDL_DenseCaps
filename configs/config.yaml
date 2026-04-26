@@ -13,7 +13,7 @@ data:
 model:
   name: densenet121_capsnet
   pretrained: false
-  backbone_checkpoint_path: artifacts/normal_lession_densenet121/best.pt
+  backbone_checkpoint_path: artifacts/normal_lesion_densenet121/best.pt
   freeze_backbone: false
   feature_h: 4
   feature_w: 4
@@ -34,7 +34,7 @@ training:
   early_stopping_patience: 30
 
 runtime:
-  output_dir: artifacts/normal_lession_densenet121_capsnet
+  output_dir: artifacts/normal_lesion_densenet121_capsnet
   device: auto
   checkpoint_name: best.pt
   log_level: INFO

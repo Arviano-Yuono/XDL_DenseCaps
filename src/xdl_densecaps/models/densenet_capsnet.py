@@ -146,7 +146,7 @@ class DenseNetCapsNetConfig:
 
 
 class DenseNetCapsNetClassifier(nn.Module):
-    """Binary normal/lession classifier: DenseNet121 features -> CapsNet head."""
+    """Binary normal/lesion classifier: DenseNet121 features -> CapsNet head."""
 
     def __init__(
         self,

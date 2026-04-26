@@ -1,4 +1,4 @@
-"""Train the configured normal/lession model."""
+"""Train the configured normal/lesion model."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ logger = get_logger("xdl_densecaps.train")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    config_path = parse_config_path(argv, "Train the configured normal vs lession model.")
+    config_path = parse_config_path(argv, "Train the configured normal vs lesion model.")
     config = load_config(config_path)
     set_seed(config.data.seed)
 

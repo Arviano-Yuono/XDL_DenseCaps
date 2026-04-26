@@ -1,4 +1,4 @@
-"""Binary normal/lession image dataset helpers."""
+"""Binary normal/lesion image dataset helpers."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from torch import Tensor
 from torch.utils.data import Dataset, Subset
 
 
-CLASS_NAMES = ("normal", "lession")
+CLASS_NAMES = ("normal", "lesion")
 NORMAL_DIR_NAMES = {"normal", "nomal"}
 IMAGE_EXTENSIONS = {".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
 
@@ -24,7 +24,7 @@ class ImageSample:
     label: int
 
 
-class BinaryNormalLessionDataset(Dataset[tuple[Tensor, int]]):
+class BinaryNormalLesionDataset(Dataset[tuple[Tensor, int]]):
     """Map ``normal`` folder images to class 0 and every other folder to class 1."""
 
     class_names = CLASS_NAMES
@@ -85,7 +85,7 @@ def find_binary_image_samples(root_dir: Path, normal_dir_names: set[str] | None 
 
 
 def stratified_train_val_split(
-    dataset: BinaryNormalLessionDataset,
+    dataset: BinaryNormalLesionDataset,
     val_ratio: float = 0.2,
     seed: int = 42,
 ) -> tuple[Subset[tuple[Tensor, int]], Subset[tuple[Tensor, int]]]:

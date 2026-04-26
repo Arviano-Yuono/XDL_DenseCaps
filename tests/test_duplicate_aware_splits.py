@@ -17,10 +17,10 @@ def test_split_indices_keep_duplicate_files_together(tmp_path):
         ImageSample(_write_file(tmp_path, "normal_a_copy.jpg", b"normal-a"), 0),
         ImageSample(_write_file(tmp_path, "normal_b.jpg", b"normal-b"), 0),
         ImageSample(_write_file(tmp_path, "normal_c.jpg", b"normal-c"), 0),
-        ImageSample(_write_file(tmp_path, "lession_a.jpg", b"lession-a"), 1),
-        ImageSample(_write_file(tmp_path, "lession_a_copy.jpg", b"lession-a"), 1),
-        ImageSample(_write_file(tmp_path, "lession_b.jpg", b"lession-b"), 1),
-        ImageSample(_write_file(tmp_path, "lession_c.jpg", b"lession-c"), 1),
+        ImageSample(_write_file(tmp_path, "lesion_a.jpg", b"lesion-a"), 1),
+        ImageSample(_write_file(tmp_path, "lesion_a_copy.jpg", b"lesion-a"), 1),
+        ImageSample(_write_file(tmp_path, "lesion_b.jpg", b"lesion-b"), 1),
+        ImageSample(_write_file(tmp_path, "lesion_c.jpg", b"lesion-c"), 1),
     ]
     dataset = DummyDataset(samples)
 

@@ -11,7 +11,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     return run_evaluation_script(
         argv,
         split_name="val",
-        description="Validate the configured normal/lession model checkpoint.",
+        description="Validate the configured normal/lesion model checkpoint.",
     )
 
 

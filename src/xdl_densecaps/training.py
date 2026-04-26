@@ -17,7 +17,7 @@ from torchvision import transforms
 from tqdm import tqdm
 
 from xdl_densecaps.config import ExperimentConfig
-from xdl_densecaps.datasets import CLASS_NAMES, BinaryNormalLessionDataset
+from xdl_densecaps.datasets import CLASS_NAMES, BinaryNormalLesionDataset
 from xdl_densecaps.models import CapsuleMarginLoss, DenseNet121Classifier, DenseNetCapsNetClassifier
 
 
@@ -138,19 +138,19 @@ def build_optimizer(config: ExperimentConfig, model: nn.Module) -> AdamW:
     )
 
 
-def build_dataset(config: ExperimentConfig, transform=None) -> tuple[BinaryNormalLessionDataset, Path]:
+def build_dataset(config: ExperimentConfig, transform=None) -> tuple[BinaryNormalLesionDataset, Path]:
     data_root = resolve_data_root(config.data.root_dir)
-    return BinaryNormalLessionDataset(data_root, transform=transform), data_root
+    return BinaryNormalLesionDataset(data_root, transform=transform), data_root
 
 
 def build_loader(
     config: ExperimentConfig,
-    dataset: BinaryNormalLessionDataset,
+    dataset: BinaryNormalLesionDataset,
     indices: list[int],
     split_name: str,
     device: torch.device,
 ) -> DataLoader[tuple[Tensor, Tensor]]:
-    transformed_dataset = BinaryNormalLessionDataset(
+    transformed_dataset = BinaryNormalLesionDataset(
         dataset.root_dir,
         transform=build_transform(config, split_name),
     )
@@ -180,7 +180,7 @@ def build_transform(config: ExperimentConfig, split_name: str):
 
 
 def load_or_create_split_indices(
-    dataset: BinaryNormalLessionDataset,
+    dataset: BinaryNormalLesionDataset,
     config: ExperimentConfig,
     data_root: Path,
 ) -> SplitIndices:
@@ -208,7 +208,7 @@ def load_or_create_split_indices(
 
 
 def create_split_indices(
-    dataset: BinaryNormalLessionDataset,
+    dataset: BinaryNormalLesionDataset,
     val_ratio: float,
     test_ratio: float,
     seed: int,
@@ -346,7 +346,7 @@ def save_run_metadata(
     output_dir: Path,
     config: ExperimentConfig,
     data_root: Path,
-    dataset: BinaryNormalLessionDataset,
+    dataset: BinaryNormalLesionDataset,
     split_indices: SplitIndices,
 ) -> None:
     metadata = {
@@ -383,7 +383,7 @@ def _split_count(total_count: int, ratio: float) -> int:
     return split_count
 
 
-def _duplicate_groups(dataset: BinaryNormalLessionDataset) -> list[list[int]]:
+def _duplicate_groups(dataset: BinaryNormalLesionDataset) -> list[list[int]]:
     groups_by_hash: dict[str, list[int]] = defaultdict(list)
     for index, sample in enumerate(dataset.samples):
         groups_by_hash[_file_sha256(sample.path)].append(index)
@@ -399,7 +399,7 @@ def _file_sha256(path: Path) -> str:
 
 
 def _split_targets(
-    dataset: BinaryNormalLessionDataset,
+    dataset: BinaryNormalLesionDataset,
     val_ratio: float,
     test_ratio: float,
 ) -> dict[str, dict[int, int]]:
@@ -449,7 +449,7 @@ def _choose_split_for_group(
 
 
 def _split_metadata(
-    dataset: BinaryNormalLessionDataset,
+    dataset: BinaryNormalLesionDataset,
     config: ExperimentConfig,
     data_root: Path,
 ) -> dict[str, object]:

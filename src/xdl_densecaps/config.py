@@ -66,7 +66,7 @@ class TrainingConfig:
 class RuntimeConfig:
     """Runtime and artifact settings."""
 
-    output_dir: str = "artifacts/normal_lession_densenet121"
+    output_dir: str = "artifacts/normal_lesion_densenet121"
     device: str = "auto"
     checkpoint_name: str = "best.pt"
     log_level: str = "INFO"
