@@ -1,9 +1,12 @@
 import json
+import sys
+import types
 
 import pytest
 import torch
 
 from xdl_densecaps.filter_lesion_regions import (
+    choose_k_by_calinski_harabasz,
     output_filename,
     select_lowest_similarity_candidate,
     write_metadata,
@@ -48,3 +51,26 @@ def test_metadata_record_can_point_to_saved_output(tmp_path):
 
     assert metadata["records"][0]["output_path"] == str(output_path)
     assert output_path.exists()
+
+
+def test_kmeans_selection_tolerates_broken_psutil(monkeypatch):
+    monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
+    monkeypatch.setitem(sys.modules, "psutil", types.SimpleNamespace())
+
+    features = torch.tensor(
+        [
+            [1.0, 0.0],
+            [0.9, 0.1],
+            [0.0, 1.0],
+            [0.1, 0.9],
+        ]
+    )
+
+    selected_k, ch_scores = choose_k_by_calinski_harabasz(
+        features,
+        max_k=3,
+        random_state=42,
+    )
+
+    assert selected_k in {2, 3}
+    assert ch_scores

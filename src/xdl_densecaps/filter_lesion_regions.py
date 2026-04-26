@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Iterator, Sequence
 
 import torch
 import torch.nn.functional as F
@@ -376,8 +378,9 @@ def fit_normal_centroids(
         random_state=random_state,
     )
 
-    kmeans = KMeans(n_clusters=selected_k, random_state=random_state, n_init="auto")
-    kmeans.fit(feature_matrix.numpy())
+    with single_threaded_openmp():
+        kmeans = KMeans(n_clusters=selected_k, random_state=random_state, n_init="auto")
+        kmeans.fit(feature_matrix.numpy())
     centroids = torch.from_numpy(kmeans.cluster_centers_).float()
     return F.normalize(centroids, p=2, dim=1), selected_k, ch_scores
 
@@ -398,16 +401,31 @@ def choose_k_by_calinski_harabasz(
 
     features_np = feature_matrix.numpy()
     ch_scores: dict[int, float] = {}
-    for k in range(2, max_valid_k + 1):
-        kmeans = KMeans(n_clusters=k, random_state=random_state, n_init="auto")
-        labels = kmeans.fit_predict(features_np)
-        if len(set(labels.tolist())) < 2:
-            continue
-        ch_scores[k] = float(calinski_harabasz_score(features_np, labels))
+    with single_threaded_openmp():
+        for k in range(2, max_valid_k + 1):
+            kmeans = KMeans(n_clusters=k, random_state=random_state, n_init="auto")
+            labels = kmeans.fit_predict(features_np)
+            if len(set(labels.tolist())) < 2:
+                continue
+            ch_scores[k] = float(calinski_harabasz_score(features_np, labels))
 
     if not ch_scores:
         return 1, {}
     return max(ch_scores, key=ch_scores.get), ch_scores
+
+
+@contextmanager
+def single_threaded_openmp() -> Iterator[None]:
+    """Avoid fragile sklearn/joblib CPU detection on some Windows installs."""
+
+    old_value = os.environ.get("OMP_NUM_THREADS")
+    if old_value is None:
+        os.environ["OMP_NUM_THREADS"] = "1"
+    try:
+        yield
+    finally:
+        if old_value is None:
+            os.environ.pop("OMP_NUM_THREADS", None)
 
 
 def score_candidate_features(features: list[Tensor], normal_centroids: Tensor) -> list[CandidateScore]:
