@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from hashlib import sha256
 from pathlib import Path
+from typing import Sequence
 
 import torch
 from torch import Tensor, nn
@@ -208,7 +209,7 @@ def load_or_create_split_indices(
 
 
 def create_split_indices(
-    dataset: BinaryNormalLesionDataset,
+    dataset,
     val_ratio: float,
     test_ratio: float,
     seed: int,
@@ -230,8 +231,9 @@ def create_split_indices(
 
     targets = _split_targets(dataset, val_ratio, test_ratio)
     split_indices = {"train": [], "val": [], "test": []}
+    num_classes = len(dataset_class_names(dataset))
     split_label_counts = {
-        split_name: {label: 0 for label in range(len(CLASS_NAMES))}
+        split_name: {label: 0 for label in range(num_classes)}
         for split_name in split_indices
     }
 
@@ -312,6 +314,56 @@ def run_epoch(
     )
 
 
+def run_paired_epoch(
+    model: nn.Module,
+    dataloader: DataLoader[tuple[Tensor, Tensor, Tensor]],
+    criterion: nn.Module,
+    device: torch.device,
+    split_name: str,
+    optimizer: torch.optim.Optimizer | None = None,
+) -> EpochMetrics:
+    is_training = optimizer is not None
+    model.train(is_training)
+
+    total_loss = 0.0
+    total_correct = 0
+    total_examples = 0
+
+    progress = tqdm(dataloader, desc=split_name, leave=False)
+    for whole_images, detail_images, targets in progress:
+        whole_images = whole_images.to(device)
+        detail_images = detail_images.to(device)
+        targets = targets.to(device)
+
+        with torch.set_grad_enabled(is_training):
+            scores = model(whole_images, detail_images)
+            loss = criterion(scores, targets)
+
+            if is_training:
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                optimizer.step()
+
+        batch_size = whole_images.size(0)
+        total_loss += loss.item() * batch_size
+        total_correct += (scores.argmax(dim=1) == targets).sum().item()
+        total_examples += batch_size
+
+        progress.set_postfix(
+            loss=total_loss / max(total_examples, 1),
+            acc=total_correct / max(total_examples, 1),
+        )
+
+    if total_examples == 0:
+        return EpochMetrics(loss=0.0, accuracy=0.0, examples=0)
+
+    return EpochMetrics(
+        loss=total_loss / total_examples,
+        accuracy=total_correct / total_examples,
+        examples=total_examples,
+    )
+
+
 def save_checkpoint(
     path: Path,
     model: nn.Module,
@@ -320,6 +372,7 @@ def save_checkpoint(
     config: ExperimentConfig,
     train_metrics: EpochMetrics,
     val_metrics: EpochMetrics,
+    class_names: Sequence[str] = CLASS_NAMES,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
@@ -327,7 +380,7 @@ def save_checkpoint(
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
-            "class_names": list(CLASS_NAMES),
+            "class_names": list(class_names),
             "config": asdict(config),
             "train_metrics": asdict(train_metrics),
             "val_metrics": asdict(val_metrics),
@@ -349,9 +402,10 @@ def save_run_metadata(
     dataset: BinaryNormalLesionDataset,
     split_indices: SplitIndices,
 ) -> None:
+    class_names = dataset_class_names(dataset)
     metadata = {
         "data_root": str(data_root),
-        "class_names": list(CLASS_NAMES),
+        "class_names": list(class_names),
         "class_counts": dataset.class_counts(),
         "split_counts": {
             "train": len(split_indices.train),
@@ -361,7 +415,7 @@ def save_run_metadata(
         "config": asdict(config),
     }
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "class_names.txt").write_text("\n".join(CLASS_NAMES) + "\n", encoding="utf-8")
+    (output_dir / "class_names.txt").write_text("\n".join(class_names) + "\n", encoding="utf-8")
     (output_dir / "run_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
 
@@ -399,17 +453,18 @@ def _file_sha256(path: Path) -> str:
 
 
 def _split_targets(
-    dataset: BinaryNormalLesionDataset,
+    dataset,
     val_ratio: float,
     test_ratio: float,
 ) -> dict[str, dict[int, int]]:
+    num_classes = len(dataset_class_names(dataset))
     targets = {
-        "train": {label: 0 for label in range(len(CLASS_NAMES))},
-        "val": {label: 0 for label in range(len(CLASS_NAMES))},
-        "test": {label: 0 for label in range(len(CLASS_NAMES))},
+        "train": {label: 0 for label in range(num_classes)},
+        "val": {label: 0 for label in range(num_classes)},
+        "test": {label: 0 for label in range(num_classes)},
     }
 
-    for label in range(len(CLASS_NAMES)):
+    for label in range(num_classes):
         total_count = sum(1 for sample in dataset.samples if sample.label == label)
         test_count = _split_count(total_count, test_ratio)
         val_count = _split_count(total_count, val_ratio)
@@ -453,12 +508,22 @@ def _split_metadata(
     config: ExperimentConfig,
     data_root: Path,
 ) -> dict[str, object]:
-    return {
+    metadata = {
         "split_strategy": SPLIT_STRATEGY,
         "data_root": str(data_root.resolve()),
         "sample_count": len(dataset),
+        "class_names": list(dataset_class_names(dataset)),
         "class_counts": dataset.class_counts(),
         "val_ratio": config.data.val_ratio,
         "test_ratio": config.data.test_ratio,
         "seed": config.data.seed,
     }
+    if config.data.detail_root_dir is not None:
+        metadata["detail_root_dir"] = str(Path(config.data.detail_root_dir).resolve())
+    if config.data.pair_metadata_path is not None:
+        metadata["pair_metadata_path"] = str(Path(config.data.pair_metadata_path).resolve())
+    return metadata
+
+
+def dataset_class_names(dataset) -> tuple[str, ...]:
+    return tuple(getattr(dataset, "class_names", CLASS_NAMES))

@@ -14,6 +14,7 @@ SUMMARY.md
 # Local experiment configs
 configs/*
 !configs/config.yaml
+!configs/stage2_paired_densecaps.yaml
 
 # dataset
 data/kvasir-v2/

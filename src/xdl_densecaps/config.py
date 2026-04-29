@@ -19,6 +19,9 @@ class DataConfig:
     """Dataset and loader settings."""
 
     root_dir: str = "datasets/raw"
+    detail_root_dir: str | None = None
+    pair_metadata_path: str | None = None
+    class_names: list[str] | None = None
     split_dir: str = "data/splits/baseline"
     image_size: int = 128
     batch_size: int = 16

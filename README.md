@@ -200,12 +200,40 @@ artifacts/normal_lesion_densenet121_capsnet/filtered_lesion_regions/
   metadata.json
 ```
 
+## Stage 2 Paired DenseCaps
+
+The second-stage classifier consumes a whole image and one detailed image for
+the same sample. It uses two DenseCaps branches, concatenates their routed
+capsules, and sends the fused capsules to a final DigitCaps classifier. The
+number of classes is discovered from the paired dataset metadata or class
+folders.
+
+```powershell
+uv run xdl-train-stage2 --config configs/stage2_paired_densecaps.yaml
+```
+
+The stage-2 dataset can come from filtered-region metadata:
+
+```yaml
+data:
+  pair_metadata_path: artifacts/kvasir_v2_densenet121_capsnet/filtered_lesion_regions/metadata.json
+```
+
+or from mirrored class-folder roots:
+
+```yaml
+data:
+  root_dir: data/stage2/whole
+  detail_root_dir: data/stage2/detail
+```
+
 ## Direct Python Commands
 
 These are equivalent to the script commands:
 
 ```powershell
 uv run python -m xdl_densecaps.train --config configs/config.yaml
+uv run python -m xdl_densecaps.train_stage2 --config configs/stage2_paired_densecaps.yaml
 uv run python -m xdl_densecaps.val --config configs/config.yaml
 uv run python -m xdl_densecaps.test --config configs/config.yaml
 uv run python -m xdl_densecaps.filter_lesion_regions --config configs/config.yaml
