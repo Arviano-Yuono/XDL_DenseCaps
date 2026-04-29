@@ -14,10 +14,17 @@ from xdl_densecaps.models.densenet_capsnet import (
 )
 from xdl_densecaps.models.densenet_classifier import DenseNet121Classifier, DenseNetClassifierConfig
 from xdl_densecaps.models.lesion_proposal import DenseNetLesionProposalModel, LesionProposalOutput
+from xdl_densecaps.models.paired_densecaps import (
+    DenseCapsEncoderBranch,
+    PairedDenseCapsFusionHead,
+    PairedDenseCapsNetClassifier,
+    PairedDenseCapsNetConfig,
+)
 
 __all__ = [
     "CapsuleMarginLoss",
     "DENSENET121_TRUNK_LAYERS",
+    "DenseCapsEncoderBranch",
     "DenseNet121BackboneConfig",
     "DenseNetCapsHead",
     "DenseNetCapsNetClassifier",
@@ -27,5 +34,8 @@ __all__ = [
     "DenseNet121FeatureExtractor",
     "DenseNetLesionProposalModel",
     "LesionProposalOutput",
+    "PairedDenseCapsFusionHead",
+    "PairedDenseCapsNetClassifier",
+    "PairedDenseCapsNetConfig",
     "RoutingCapsuleLayer",
 ]
