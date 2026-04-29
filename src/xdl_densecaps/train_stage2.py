@@ -116,6 +116,7 @@ def build_stage2_dataset(config: ExperimentConfig) -> tuple[PairedImageDataset, 
         detail_root_dir=config.data.detail_root_dir,
         metadata_path=config.data.pair_metadata_path,
         class_names=config.data.class_names,
+        label_from_parent_dir=config.data.label_from_parent_dir,
     )
     data_root = Path(config.data.pair_metadata_path or config.data.root_dir)
     return dataset, data_root

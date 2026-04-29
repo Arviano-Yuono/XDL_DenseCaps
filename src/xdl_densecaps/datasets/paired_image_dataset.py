@@ -49,6 +49,7 @@ class PairedImageDataset(Dataset[tuple[Tensor, Tensor, int]]):
         whole_transform: Callable[[Image.Image], Tensor] | None = None,
         detail_transform: Callable[[Image.Image], Tensor] | None = None,
         class_names: Sequence[str] | None = None,
+        label_from_parent_dir: bool = False,
     ) -> None:
         self.root_dir = Path(root_dir) if root_dir is not None else None
         self.detail_root_dir = Path(detail_root_dir) if detail_root_dir is not None else None
@@ -56,11 +57,13 @@ class PairedImageDataset(Dataset[tuple[Tensor, Tensor, int]]):
         self.whole_transform = whole_transform or transform
         self.detail_transform = detail_transform or transform
         self._configured_class_names = tuple(class_names) if class_names is not None else None
+        self.label_from_parent_dir = label_from_parent_dir
 
         if self.metadata_path is not None:
             self.samples, self.class_names = find_paired_image_samples_from_metadata(
                 self.metadata_path,
                 class_names=self._configured_class_names,
+                label_from_parent_dir=label_from_parent_dir,
             )
         else:
             if self.root_dir is None or self.detail_root_dir is None:
@@ -69,6 +72,7 @@ class PairedImageDataset(Dataset[tuple[Tensor, Tensor, int]]):
                 self.root_dir,
                 self.detail_root_dir,
                 class_names=self._configured_class_names,
+                label_from_parent_dir=label_from_parent_dir,
             )
 
         if not self.samples:
@@ -96,6 +100,7 @@ class PairedImageDataset(Dataset[tuple[Tensor, Tensor, int]]):
             metadata_path=self.metadata_path,
             transform=transform,
             class_names=self.class_names,
+            label_from_parent_dir=self.label_from_parent_dir,
         )
 
     def class_counts(self) -> dict[str, int]:
@@ -110,6 +115,7 @@ def find_paired_image_samples(
     detail_root_dir: str | Path,
     *,
     class_names: Sequence[str] | None = None,
+    label_from_parent_dir: bool = False,
 ) -> tuple[list[PairedImageSample], tuple[str, ...]]:
     """Collect paired samples from mirrored class-folder roots."""
 
@@ -120,20 +126,28 @@ def find_paired_image_samples(
     if not detail_root.exists():
         raise FileNotFoundError(f"Detail-image root does not exist: {detail_root}")
 
-    discovered_classes = tuple(sorted(path.name for path in root.iterdir() if path.is_dir()))
+    whole_paths = [
+        path
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS and len(path.relative_to(root).parts) >= 2
+    ]
+    discovered_classes = tuple(
+        sorted(
+            {
+                class_name
+                for path in whole_paths
+                if (class_name := _class_name_from_relative_path(path.relative_to(root), label_from_parent_dir))
+                is not None
+            }
+        )
+    )
     resolved_class_names = tuple(class_names) if class_names is not None else discovered_classes
     class_to_label = {class_name: label for label, class_name in enumerate(resolved_class_names)}
 
     samples: list[PairedImageSample] = []
-    for whole_path in sorted(root.rglob("*")):
-        if not whole_path.is_file() or whole_path.suffix.lower() not in IMAGE_EXTENSIONS:
-            continue
-
+    for whole_path in whole_paths:
         relative_path = whole_path.relative_to(root)
-        if len(relative_path.parts) < 2:
-            continue
-
-        class_name = relative_path.parts[0]
+        class_name = _class_name_from_relative_path(relative_path, label_from_parent_dir)
         if class_name not in class_to_label:
             continue
 
@@ -157,6 +171,7 @@ def find_paired_image_samples_from_metadata(
     metadata_path: str | Path,
     *,
     class_names: Sequence[str] | None = None,
+    label_from_parent_dir: bool = False,
 ) -> tuple[list[PairedImageSample], tuple[str, ...]]:
     """Collect paired samples from filter-region metadata records."""
 
@@ -174,7 +189,13 @@ def find_paired_image_samples_from_metadata(
     if not raw_records:
         raise ValueError(f"Pair metadata has no records: {path}")
 
-    resolved_class_names = _metadata_class_names(payload, raw_records, class_names)
+    resolved_class_names = _metadata_class_names(
+        payload,
+        raw_records,
+        class_names,
+        metadata_dir=path.parent,
+        label_from_parent_dir=label_from_parent_dir,
+    )
     class_to_label = {class_name: label for label, class_name in enumerate(resolved_class_names)}
     samples: list[PairedImageSample] = []
 
@@ -187,12 +208,17 @@ def find_paired_image_samples_from_metadata(
         if whole_path_value is None or detail_path_value is None:
             raise ValueError("Each pair metadata record needs original_path/whole_path and output_path/detail_path.")
 
-        class_name = record.get("true_class") or record.get("class_name")
-        label = record.get("true_label", record.get("label"))
-        if class_name is None:
-            if label is None:
-                raise ValueError("Each pair metadata record needs true_class/class_name or true_label/label.")
-            class_name = resolved_class_names[int(label)]
+        whole_path = _resolve_metadata_path(whole_path_value, metadata_dir=path.parent)
+        detail_path = _resolve_metadata_path(detail_path_value, metadata_dir=path.parent)
+        if label_from_parent_dir:
+            class_name = whole_path.parent.name
+        else:
+            class_name = record.get("true_class") or record.get("class_name")
+            label = record.get("true_label", record.get("label"))
+            if class_name is None:
+                if label is None:
+                    raise ValueError("Each pair metadata record needs true_class/class_name or true_label/label.")
+                class_name = resolved_class_names[int(label)]
 
         class_name = str(class_name)
         if class_name not in class_to_label:
@@ -200,8 +226,8 @@ def find_paired_image_samples_from_metadata(
 
         samples.append(
             PairedImageSample(
-                whole_path=_resolve_metadata_path(whole_path_value, metadata_dir=path.parent),
-                detail_path=_resolve_metadata_path(detail_path_value, metadata_dir=path.parent),
+                whole_path=whole_path,
+                detail_path=detail_path,
                 label=class_to_label[class_name],
                 class_name=class_name,
             )
@@ -214,9 +240,27 @@ def _metadata_class_names(
     payload: dict[str, object],
     records: list[object],
     class_names: Sequence[str] | None,
+    *,
+    metadata_dir: Path,
+    label_from_parent_dir: bool,
 ) -> tuple[str, ...]:
     if class_names is not None:
         return tuple(str(class_name) for class_name in class_names)
+
+    if label_from_parent_dir:
+        discovered = sorted(
+            {
+                _resolve_metadata_path(
+                    record.get("original_path") or record.get("whole_path"),
+                    metadata_dir=metadata_dir,
+                ).parent.name
+                for record in records
+                if isinstance(record, dict) and (record.get("original_path") or record.get("whole_path"))
+            }
+        )
+        if not discovered:
+            raise ValueError("Could not infer class names from pair metadata original paths.")
+        return tuple(discovered)
 
     settings = payload.get("settings")
     if isinstance(settings, dict) and isinstance(settings.get("class_names"), list):
@@ -256,3 +300,11 @@ def _matching_detail_path(detail_root: Path, relative_path: Path) -> Path | None
         if candidate.exists():
             return candidate
     return None
+
+
+def _class_name_from_relative_path(relative_path: Path, label_from_parent_dir: bool) -> str | None:
+    if len(relative_path.parts) < 2:
+        return None
+    if label_from_parent_dir:
+        return relative_path.parent.name
+    return relative_path.parts[0]

@@ -22,6 +22,7 @@ class DataConfig:
     detail_root_dir: str | None = None
     pair_metadata_path: str | None = None
     class_names: list[str] | None = None
+    label_from_parent_dir: bool = False
     split_dir: str = "data/splits/baseline"
     image_size: int = 128
     batch_size: int = 16
