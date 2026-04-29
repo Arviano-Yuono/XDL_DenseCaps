@@ -1,6 +1,14 @@
 data:
   root_dir: data/kvasir-v2
   pair_metadata_path: artifacts/kvasir_v2_densenet121_capsnet/filtered_lesion_regions/metadata.json
+  label_from_parent_dir: true
+  class_names:
+    - normal-cecum
+    - normal-pylorus
+    - normal-z-line
+    - esophagitis
+    - polyps
+    - uc
   split_dir: data/splits/stage2_paired_densecaps
   image_size: 128
   batch_size: 4

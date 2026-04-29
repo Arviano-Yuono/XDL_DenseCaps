@@ -219,6 +219,11 @@ data:
   pair_metadata_path: artifacts/kvasir_v2_densenet121_capsnet/filtered_lesion_regions/metadata.json
 ```
 
+Set `data.label_from_parent_dir: true` to train on the original image
+subfolders, such as `normal-cecum`, `normal-pylorus`, `esophagitis`,
+`polyps`, and `uc`, instead of the binary `normal`/`lesion` labels stored in
+the stage-1 metadata.
+
 or from mirrored class-folder roots:
 
 ```yaml
