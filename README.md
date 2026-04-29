@@ -190,11 +190,13 @@ uv run xdl-filter-lesions --config configs/config.yaml
 
 This processes every image under `data.root_dir`, builds KMeans normal-region
 centroids from correctly predicted normal images, and saves one filtered lesion
-crop per correctly predicted lesion image. The default output is:
+crop per correctly predicted lesion image. It also saves one selected normal
+crop per correctly predicted normal image. The default output is:
 
 ```text
 artifacts/normal_lesion_densenet121_capsnet/filtered_lesion_regions/
-  images/
+  images/          -> selected lesion crops
+  normal_images/   -> selected normal crops
   metadata.json
 ```
 

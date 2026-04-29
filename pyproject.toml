@@ -5,6 +5,7 @@ description = "Incremental PyTorch implementation of the DenseNetCaps baseline f
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
+    "ipykernel>=7.2.0",
     "matplotlib>=3.10.9",
     "opencv-python>=4.13.0.92",
     "pillow>=11.2.1",
