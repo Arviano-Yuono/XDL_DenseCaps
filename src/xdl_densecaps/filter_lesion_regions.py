@@ -127,6 +127,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         random_state=config.data.seed,
     )
 
+    normal_records = save_filtered_normal_regions(
+        model=model,
+        loader=loader,
+        dataset=dataset,
+        device=device,
+        output_dir=output_dir,
+        threshold=args.threshold,
+        grad_cam_layer=args.grad_cam_layer,
+        component_finder=component_finder,
+        crop_extractor=crop_extractor,
+        normal_centroids=normal_centroids,
+    )
+
     records = save_filtered_lesion_regions(
         model=model,
         loader=loader,
@@ -152,19 +165,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             "max_k": args.max_k,
             "selected_k": selected_k,
             "grad_cam_layer": args.grad_cam_layer,
+            "normal_grad_cam_target_class": NORMAL_LABEL,
+            "lesion_grad_cam_target_class": LESION_LABEL,
             "normal_reference": "correctly_predicted_normal_candidates",
             "output_image": "zoomed_masked_crop",
+            "normal_region_selection": "highest_max_centroid_similarity",
+            "lesion_region_selection": "lowest_sum_centroid_similarity",
         },
         "normal_reference": {
             "candidate_count": len(normal_features),
             "ch_scores": {str(k): score for k, score in ch_scores.items()},
         },
+        "normal_records": normal_records,
         "records": records,
     }
     write_metadata(output_dir / "metadata.json", metadata)
 
     print(f"Normal reference candidates: {len(normal_features)}")
     print(f"Selected K: {selected_k}")
+    print(f"Saved filtered normal crops: {len(normal_records)}")
     print(f"Saved filtered lesion crops: {len(records)}")
     print(f"Output directory: {output_dir}")
     return 0
@@ -186,7 +205,7 @@ def collect_normal_features(
         cams, scores = compute_grad_cam(
             model,
             images.to(device),
-            target_class=LESION_LABEL,
+            target_class=NORMAL_LABEL,
             layer_name=grad_cam_layer,
         )
         predictions = scores.argmax(dim=1).cpu()
@@ -208,6 +227,79 @@ def collect_normal_features(
                 normal_features.append(candidate_feature(model, candidate.image, device))
 
     return normal_features
+
+
+def save_filtered_normal_regions(
+    *,
+    model: nn.Module,
+    loader: DataLoader,
+    dataset: BinaryNormalLesionDataset,
+    device: torch.device,
+    output_dir: Path,
+    threshold: float,
+    grad_cam_layer: str,
+    component_finder: SquareConnectedComponents,
+    crop_extractor: ZoomedMaskCropExtractor,
+    normal_centroids: Tensor,
+) -> list[dict[str, object]]:
+    image_dir = output_dir / "normal_images"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    records: list[dict[str, object]] = []
+
+    for images, labels, indices in tqdm(loader, desc="Normal filtering", leave=False):
+        cams, scores = compute_grad_cam(
+            model,
+            images.to(device),
+            target_class=NORMAL_LABEL,
+            layer_name=grad_cam_layer,
+        )
+        predictions = scores.argmax(dim=1).cpu()
+
+        for batch_index in range(images.size(0)):
+            true_label = int(labels[batch_index])
+            pred_label = int(predictions[batch_index])
+            if true_label != NORMAL_LABEL or pred_label != true_label:
+                continue
+
+            candidates = extract_candidates(
+                image=images[batch_index],
+                attention_map=cams[batch_index],
+                threshold=threshold,
+                component_finder=component_finder,
+                crop_extractor=crop_extractor,
+            )
+            if not candidates:
+                continue
+
+            features = [candidate_feature(model, candidate.image, device) for candidate in candidates]
+            best_score = select_highest_max_similarity_candidate(features, normal_centroids)
+            if best_score is None:
+                continue
+
+            dataset_index = int(indices[batch_index])
+            sample = dataset.samples[dataset_index]
+            selected_candidate = candidates[best_score.candidate_index]
+            output_path = image_dir / output_filename(sample.path, dataset_index, best_score.candidate_index)
+            save_tensor_image(selected_candidate.image, output_path)
+
+            records.append(
+                {
+                    "dataset_index": dataset_index,
+                    "original_path": str(sample.path),
+                    "output_path": str(output_path),
+                    "true_label": true_label,
+                    "true_class": CLASS_NAMES[true_label],
+                    "pred_label": pred_label,
+                    "pred_class": CLASS_NAMES[pred_label],
+                    "pred_score": float(scores[batch_index, pred_label].detach().cpu()),
+                    "candidate_index": best_score.candidate_index,
+                    "normal_similarity_score": best_score.score,
+                    "centroid_similarities": best_score.centroid_similarities,
+                    "bbox_xyxy_resized": list(selected_candidate.bbox_xyxy),
+                }
+            )
+
+    return records
 
 
 def save_filtered_lesion_regions(
@@ -450,6 +542,26 @@ def select_lowest_similarity_candidate(
     if not scores:
         return None
     return min(scores, key=lambda score: score.score)
+
+
+def select_highest_max_similarity_candidate(
+    features: list[Tensor],
+    normal_centroids: Tensor,
+) -> CandidateScore | None:
+    scores: list[CandidateScore] = []
+    for candidate_index, feature in enumerate(features):
+        similarities = torch.matmul(normal_centroids, feature.float())
+        scores.append(
+            CandidateScore(
+                candidate_index=candidate_index,
+                score=float(similarities.max().item()),
+                centroid_similarities=[float(value) for value in similarities.tolist()],
+            )
+        )
+
+    if not scores:
+        return None
+    return max(scores, key=lambda score: score.score)
 
 
 def output_filename(original_path: Path, dataset_index: int, candidate_index: int) -> str:
