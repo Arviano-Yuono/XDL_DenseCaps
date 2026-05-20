@@ -20,6 +20,7 @@ xdl-train = "xdl_densecaps.train:main"
 xdl-train-stage2 = "xdl_densecaps.train_stage2:main"
 xdl-val = "xdl_densecaps.val:main"
 xdl-test = "xdl_densecaps.test:main"
+xdl-test-grading = "xdl_densecaps.test_grading:main"
 xdl-filter-lesions = "xdl_densecaps.filter_lesion_regions:main"
 
 [build-system]
