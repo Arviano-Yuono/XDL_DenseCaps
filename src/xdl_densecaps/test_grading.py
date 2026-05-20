@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
@@ -177,6 +178,7 @@ def run_paired_grading_evaluation(
 ) -> int:
     output_dir = Path(config.runtime.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    config = _with_portable_pair_metadata(config, output_dir=output_dir)
     log_path = _configure_evaluation_logging(config, output_dir, split_name)
     logger = get_logger("xdl_densecaps.test_grading")
 
@@ -233,6 +235,75 @@ def _load_with_data_overrides(
     if pair_metadata_path is not None:
         data = replace(data, pair_metadata_path=pair_metadata_path)
     return replace(config, data=data)
+
+
+def _with_portable_pair_metadata(config: ExperimentConfig, *, output_dir: Path) -> ExperimentConfig:
+    metadata_path = config.data.pair_metadata_path
+    if metadata_path is None:
+        return config
+
+    source_path = Path(metadata_path)
+    if not source_path.exists():
+        return config
+
+    payload = json.loads(source_path.read_text(encoding="utf-8"))
+    normalized_payload, changed = _normalize_pair_metadata_paths(payload)
+    if not changed:
+        return config
+
+    portable_path = output_dir / "portable_pair_metadata.json"
+    portable_path.parent.mkdir(parents=True, exist_ok=True)
+    portable_path.write_text(json.dumps(normalized_payload, indent=2), encoding="utf-8")
+    return replace(config, data=replace(config.data, pair_metadata_path=str(portable_path)))
+
+
+def _normalize_pair_metadata_paths(payload: object) -> tuple[object, bool]:
+    if not isinstance(payload, dict):
+        return payload, False
+
+    changed = False
+    normalized_payload = dict(payload)
+    for section in ("normal_records", "records"):
+        normalized_records = []
+        for record in normalized_payload.get(section, []):
+            normalized_record, record_changed = _normalize_pair_metadata_record(record)
+            normalized_records.append(normalized_record)
+            changed = changed or record_changed
+        if section in normalized_payload:
+            normalized_payload[section] = normalized_records
+
+    return normalized_payload, changed
+
+
+def _normalize_pair_metadata_record(record: object) -> tuple[object, bool]:
+    if not isinstance(record, dict):
+        return record, False
+
+    changed = False
+    normalized_record = dict(record)
+    for key in ("original_path", "whole_path", "output_path", "detail_path"):
+        if key not in normalized_record:
+            continue
+
+        normalized_path, path_changed = _normalize_portable_path_value(normalized_record[key])
+        normalized_record[key] = normalized_path
+        changed = changed or path_changed
+
+    return normalized_record, changed
+
+
+def _normalize_portable_path_value(path_value: object) -> tuple[object, bool]:
+    if not isinstance(path_value, str) or "\\" not in path_value:
+        return path_value, False
+
+    original_path = Path(path_value)
+    if original_path.exists():
+        return path_value, False
+
+    normalized_value = path_value.replace("\\", "/")
+    if normalized_value == path_value:
+        return path_value, False
+    return normalized_value, True
 
 
 def _configure_evaluation_logging(config: ExperimentConfig, output_dir: Path, split_name: str) -> Path | None:

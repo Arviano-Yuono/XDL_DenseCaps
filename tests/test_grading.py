@@ -1,4 +1,5 @@
 from dataclasses import replace
+import json
 
 from xdl_densecaps import test_grading
 from xdl_densecaps.config import ExperimentConfig, ModelConfig
@@ -88,6 +89,43 @@ def test_grading_cli_runs_both_stages_in_order_and_applies_path_overrides(monkey
         ("single", stage1_config, str(stage1_root), None, "test"),
         ("paired", stage2_config, str(stage2_root), str(stage2_metadata), "test"),
     ]
+
+
+def test_portable_pair_metadata_normalizes_windows_style_relative_paths(tmp_path):
+    metadata_path = tmp_path / "metadata.json"
+    output_dir = tmp_path / "output"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "normal_records": [
+                    {
+                        "original_path": "data\\uc-grading\\normal\\normal\\image.jpg",
+                        "output_path": "artifacts\\grading\\filtered_lesion_regions\\normal_images\\image.png",
+                    }
+                ],
+                "records": [
+                    {
+                        "original_path": "data\\uc-grading\\lesion\\uc_1\\image.jpg",
+                        "output_path": "artifacts\\grading\\filtered_lesion_regions\\images\\image.png",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = replace(ExperimentConfig(), data=replace(ExperimentConfig().data, pair_metadata_path=str(metadata_path)))
+
+    portable_config = test_grading._with_portable_pair_metadata(config, output_dir=output_dir)
+    portable_path = output_dir / "portable_pair_metadata.json"
+    payload = json.loads(portable_path.read_text(encoding="utf-8"))
+
+    assert portable_config.data.pair_metadata_path == str(portable_path)
+    assert payload["normal_records"][0]["original_path"] == "data/uc-grading/normal/normal/image.jpg"
+    assert payload["normal_records"][0]["output_path"] == (
+        "artifacts/grading/filtered_lesion_regions/normal_images/image.png"
+    )
+    assert payload["records"][0]["original_path"] == "data/uc-grading/lesion/uc_1/image.jpg"
+    assert payload["records"][0]["output_path"] == "artifacts/grading/filtered_lesion_regions/images/image.png"
 
 
 def _write_config(
