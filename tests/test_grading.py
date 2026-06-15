@@ -3,6 +3,7 @@ import json
 
 from xdl_densecaps import test_grading
 from xdl_densecaps.config import ExperimentConfig, ModelConfig
+from xdl_densecaps.training import EpochMetrics
 
 
 def test_grading_evaluation_routes_stage1_model_to_single_image_runner(monkeypatch, tmp_path):
@@ -91,6 +92,43 @@ def test_grading_cli_runs_both_stages_in_order_and_applies_path_overrides(monkey
     ]
 
 
+def test_grading_cli_can_run_all_splits(monkeypatch, tmp_path):
+    stage2_config = _write_config(
+        tmp_path / "grading-2.yaml",
+        model_name="paired_densenet121_capsnet",
+        root_dir="missing-stage2-root",
+        output_dir=tmp_path / "stage2-output",
+        pair_metadata_path="missing-stage2-metadata.json",
+    )
+    calls = []
+
+    def fake_paired_runner(config, *, config_path, split_name):
+        calls.append(split_name)
+        return 0
+
+    monkeypatch.setattr(test_grading, "run_paired_grading_evaluation", fake_paired_runner)
+
+    result = test_grading.main(
+        [
+            "--stage",
+            "stage2",
+            "--split",
+            "all",
+            "--stage2-config",
+            str(stage2_config),
+        ]
+    )
+
+    assert result == 0
+    assert calls == ["train", "val", "test"]
+
+
+def test_train_split_uses_eval_loader_transform_name():
+    assert test_grading._loader_eval_split_name("train") == "val"
+    assert test_grading._loader_eval_split_name("val") == "val"
+    assert test_grading._loader_eval_split_name("test") == "test"
+
+
 def test_portable_pair_metadata_normalizes_windows_style_relative_paths(tmp_path):
     metadata_path = tmp_path / "metadata.json"
     output_dir = tmp_path / "output"
@@ -126,6 +164,64 @@ def test_portable_pair_metadata_normalizes_windows_style_relative_paths(tmp_path
     )
     assert payload["records"][0]["original_path"] == "data/uc-grading/lesion/uc_1/image.jpg"
     assert payload["records"][0]["output_path"] == "artifacts/grading/filtered_lesion_regions/images/image.png"
+
+
+def test_classification_report_includes_confusion_matrix_and_derived_metrics():
+    report = test_grading._classification_report(
+        targets=[0, 0, 1, 1, 1, 2],
+        predictions=[0, 1, 1, 1, 2, 2],
+        class_names=["a", "b", "c"],
+    )
+
+    assert report["confusion_matrix"] == {
+        "labels": ["a", "b", "c"],
+        "rows": "true_labels",
+        "columns": "predicted_labels",
+        "matrix": [
+            [1, 1, 0],
+            [0, 2, 1],
+            [0, 0, 1],
+        ],
+    }
+    assert report["per_class"][0]["sensitivity"] == 0.5
+    assert report["per_class"][0]["specificity"] == 1.0
+    assert report["per_class"][0]["f1"] == 2 / 3
+    assert report["per_class"][1]["sensitivity"] == 2 / 3
+    assert report["per_class"][1]["specificity"] == 2 / 3
+    assert report["macro_f1"] == (2 / 3 + 2 / 3 + 2 / 3) / 3
+
+
+def test_confusion_matrix_image_is_written(tmp_path):
+    report = test_grading._classification_report(
+        targets=[0, 0, 1],
+        predictions=[0, 1, 1],
+        class_names=["normal", "uc_1"],
+    )
+    output_path = tmp_path / "test_confusion_matrix.png"
+
+    test_grading.save_confusion_matrix_image(report, output_path, title="Test confusion matrix")
+
+    assert output_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_metrics_table_includes_summary_and_per_class_rows():
+    report = test_grading._classification_report(
+        targets=[0, 0, 1],
+        predictions=[0, 1, 1],
+        class_names=["normal", "uc_1"],
+    )
+
+    table = test_grading._format_metrics_table(
+        "val",
+        EpochMetrics(loss=0.25, accuracy=2 / 3, examples=3),
+        report,
+    )
+
+    assert "| Split | Loss | Accuracy |" in table
+    assert "| val | 0.2500 | 0.6667 |" in table
+    assert "| Class | Support | Precision | Sensitivity | Specificity | F1 |" in table
+    assert "| normal | 2 |" in table
+    assert "| uc_1 | 1 |" in table
 
 
 def _write_config(
